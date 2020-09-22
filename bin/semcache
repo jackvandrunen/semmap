@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+
+import argparse
+import glob
+import logging
+import multiprocessing
+import os
+import sys
+
+import gensim
+
+
+def read_corpus(root):
+    for root_, dirs, files in os.walk(root):
+        for name in files:
+            if name[-3:].lower() == '.md':
+                path = os.path.join(root_, name)
+                with open(path) as f:
+                    tokens = gensim.utils.simple_preprocess(f.read(), deacc=True, max_len=20)
+                yield gensim.models.doc2vec.TaggedDocument(tokens, [path])
+
+
+def build_model(root, cores=1):
+    corpus = list(read_corpus(root))
+    model = gensim.models.doc2vec.Doc2Vec(dm=0, dbow_words=1, negative=5, vector_size=64, min_count=2, epochs=40, workers=cores)
+    model.build_vocab(corpus)
+    print(f' Docs: {len(corpus)}')
+    print(f'Vocab: {len(model.wv.vocab)}')
+    model.train(corpus, total_examples=model.corpus_count, epochs=model.epochs)
+    model.save(os.path.join(root, '.semcache'))
+
+
+if __name__ == '__main__':
+    logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.WARN)
+
+    parser = argparse.ArgumentParser()
+    subparser = parser.add_subparsers(dest='action', required=True, help='semcache actions')
+    build_parser = subparser.add_parser('build', help='build or rebuild semcache in target directory')
+    update_parser = subparser.add_parser('update', help='(not implemented)')
+    args = parser.parse_args(sys.argv[1:])
+
+    if args.action == 'build':
+        build_model('.', cores=multiprocessing.cpu_count())
+        print('Success!')
+    elif args.action == 'update':
+        sys.stderr.write("'update' command is not yet implemented!\n")
+        sys.exit(-1)
