@@ -18,17 +18,27 @@ def search(model, query, topn=10):
         print(f'[{score:.2f}] {path}')
 
 
+def search_interval(model, query, a, b):
+    sims = model.docvecs.most_similar([query], topn=b)[a:]
+    for path, score in sims:
+        print(f'[{score:.2f}] {path}')
+
+
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.WARN)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('query', help='file to map')
     parser.add_argument('-n', dest='count', required=False, type=int, default=10, help='number of results to return')
+    parser.add_argument('-i', nargs=2, dest='interval', required=False, type=int, help='interval of results to return')
     args = parser.parse_args(sys.argv[1:])
 
     try:
         model = load_model('.')
-        search(model, args.query, args.count)
+        if args.interval is not None:
+            search_interval(model, args.query, *args.interval)
+        else:
+            search(model, args.query, args.count)
     except FileNotFoundError:
         sys.stderr.write("semcache not initialized, run 'semcache build' to get started\n")
         sys.exit(-1)

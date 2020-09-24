@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+
+import os
+import subprocess
+
+from bottle import route, response, static_file, run, abort
+from bottle import template as tpl
+import markdown
+import mdx_math
+
+TEMPLATE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'views'))
+
+
+def load_template(template):
+    with open(os.path.join(TEMPLATE_PATH, f'{template}.html')) as f:
+        return f.read()
+
+
+def note_exists(path):
+    return path[-3:] == '.md' and os.path.exists(path)
+
+
+def process_links(path, a, b):
+    template = load_template('links')
+    semmap_out = subprocess.check_output(['semmap', str(path), '-i', str(a), str(b)]).decode('utf-8')
+    links = [line.split()[1][1:] for line in semmap_out.strip().split('\n')]
+    return tpl(template, links=links)
+
+
+def process_note(path):
+    template = load_template('note')
+    with open(path) as f:
+        md = f.read()
+    content = markdown.markdown(md, extensions=[
+        mdx_math.MathExtension(enable_dollar_delimiter=True),
+        'markdown.extensions.fenced_code',
+        'markdown.extensions.tables',
+        'markdown.extensions.toc'
+    ])
+    return template.replace('{{content}}', content)
+
+
+@route('/')
+def serve_index():
+    return static_file('index.html', root=TEMPLATE_PATH)
+
+
+@route('/_static/<filename>')
+def serve_static(filename):
+    return static_file(filename, root=os.path.join(TEMPLATE_PATH, 'static'))
+
+
+@route('/<filepath:path>/map/<a:int>/<b:int>/')
+def serve_links(filepath, a, b):
+    filepath = os.path.join('.', filepath)
+    if note_exists(filepath):
+        return process_links(filepath, a, b)
+    abort(404)
+
+
+@route('/<filepath:path>')
+def serve_note(filepath):
+    filepath = os.path.join('.', filepath)
+    if note_exists(filepath):
+        return process_note(filepath)
+    abort(404)
+
+
+if __name__ == '__main__':
+    run(host='127.0.0.1', port=3031)
